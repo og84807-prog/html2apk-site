@@ -784,10 +784,13 @@ async function startGeneration() {
   log('Injetando HTML no strings.xml...', 'info');
   t.s2 = Math.floor((Date.now() - startTime)/1000);
 
+  // Escapar ]]> dentro do HTML pra não quebrar o CDATA do XML
+  const escapedHtml = html.replace(/\]\]>/g, ']]]]><![CDATA[>');
+
   const stringsXml = `<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">${appName.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</string>
-    <string name="html_content"><![CDATA[${html}]]></string>
+    <string name="html_content"><![CDATA[${escapedHtml}]]></string>
 </resources>`;
 
   const okInject = await updateFile(
