@@ -771,28 +771,42 @@ async function startGeneration() {
     return;
   }
   setStep('s1', 'done', Math.floor((Date.now()-startTime)/1000) - t.s1);
-  log(`✓ Repo criado: ${user}/${nomeRepo}`, 'ok');
+  log(`✓ Repo criado com sucesso: ${user}/${nomeRepo}`, 'ok');
 
-  // Aguardar init
-  log('Aguardando repositório inicializar (12s)...', 'info');
-  await sleep(12000);
+  // Tempo aumentado para dar folga para o GitHub estabilizar os arquivos iniciais
+  log('Aguardando inicialização completa do repositório (16s)...', 'info');
+  await sleep(16000);
 
   // ── STEP 2: Injetar HTML e Configurar Recursos ──
   setStep('s2', 'active');
-  log('Configurando strings.xml...', 'info');
+  log('Limpando e reconfigurando strings.xml...', 'info');
   t.s2 = Math.floor((Date.now() - startTime)/1000);
 
-  // Limpeza cirúrgica: Remove de vez a tag 'html_content' que causava erro no Gradle
+  // Sobrescrevendo o XML removendo a tag causadora do erro
   const stringsXml = `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <string name="app_name"><![CDATA[${appName}]]></string>\n</resources>`;
 
-  await updateFile(
+  const okStrings = await updateFile(
     token, user, nomeRepo,
     'app/src/main/res/values/strings.xml',
     stringsXml,
-    `chore: set app name to ${appName}`
+    `chore: sanitize strings.xml and set name to ${appName}`
   );
 
-  log('Injetando HTML puro em assets/index.html...', 'info');
+  if (!okStrings) {
+    log('Aviso: Falha ao atualizar strings.xml na primeira tentativa, tentando novamente em 3s...', 'orange');
+    await sleep(3000);
+    const retryStrings = await updateFile(token, user, nomeRepo, 'app/src/main/res/values/strings.xml', stringsXml, `chore: retry sanitize strings.xml`);
+    if(!retryStrings) {
+      log('Erro crítico ao limpar strings.xml do template!', 'err');
+      setStep('s2', 'error');
+      stopTimer();
+      document.getElementById('btnGenerate').disabled = false;
+      return;
+    }
+  }
+  log('✓ Arquivo strings.xml limpo com sucesso!', 'ok');
+
+  log('Injetando código em assets/index.html...', 'info');
   const okInject = await updateFile(
     token, user, nomeRepo,
     'app/src/main/assets/index.html',
@@ -801,14 +815,14 @@ async function startGeneration() {
   );
 
   if (!okInject) {
-    log('Erro ao injetar HTML!', 'err');
+    log('Erro ao injetar código HTML no diretório assets!', 'err');
     setStep('s2', 'error');
     stopTimer();
     document.getElementById('btnGenerate').disabled = false;
     return;
   }
   setStep('s2', 'done', Math.floor((Date.now()-startTime)/1000) - t.s2);
-  log('✓ Recursos configurados com sucesso', 'ok');
+  log('✓ Todos os recursos locais reconfigurados', 'ok');
 
   // ── STEP 3: Aguardar build ──
   setStep('s3', 'active');
@@ -819,24 +833,24 @@ async function startGeneration() {
 
   if (!build.success) {
     log(`Build falhou: ${build.conclusion}`, 'err');
-    log(`Ver log: https://github.com/${user}/${nomeRepo}/actions`, 'info');
+    log(`Ver log completo em: https://github.com/${user}/${nomeRepo}/actions`, 'info');
     setStep('s3', 'error');
     stopTimer();
     document.getElementById('btnGenerate').disabled = false;
     return;
   }
   setStep('s3', 'done', Math.floor((Date.now()-startTime)/1000) - t.s3);
-  log('✓ Build concluído com sucesso!', 'ok');
+  log('✓ Build concluído com sucesso total!', 'ok');
 
   // ── STEP 4: Download ──
   setStep('s4', 'active');
-  log('Obtendo link de download...', 'info');
+  log('Coletando link para o download do APK...', 'info');
 
   const dlUrl = await getArtifactUrl(token, user, nomeRepo, build.id);
   setStep('s4', 'done', Math.floor((Date.now()-startTime)/1000));
   stopTimer();
 
-  // Mostrar download
+  // Mostrar painel de download
   document.getElementById('progressCard').classList.remove('show');
   document.getElementById('downloadCard').classList.add('show');
   document.getElementById('dlAppName').textContent = `${appName} — pronto!`;
@@ -851,14 +865,13 @@ async function startGeneration() {
     dlBtn.textContent = '🔗 VER NO GITHUB';
   }
 
-  log(`✓ CONCLUÍDO em ${Math.floor((Date.now()-startTime)/1000)}s`, 'ok');
+  log(`✓ PROCESSO CONCLUÍDO EM ${Math.floor((Date.now()-startTime)/1000)}s`, 'ok');
   document.getElementById('btnGenerate').disabled = false;
 }
 
 function resetForm() {
   document.getElementById('appName').value = '';
   document.getElementById('htmlCode').value = '';
-  document.getElementById('progressCard').classList.remove('remove');
   document.getElementById('progressCard').classList.remove('show');
   document.getElementById('downloadCard').classList.remove('show');
   document.getElementById('logBox').innerHTML = '';
@@ -866,7 +879,7 @@ function resetForm() {
   ['s1','s2','s3','s4'].forEach(s => setStep(s, 'wait'));
 }
 
-// Init
+// Inicialização básica
 window.addEventListener('load', () => {
   const cfg = loadConfig();
   if (!cfg.token) {
