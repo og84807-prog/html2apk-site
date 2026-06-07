@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTML2APK — Converta HTML em APK</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #080c10;
+  --surface: #0e1419;
+  --border: #1e2830;
+  --border-hover: #2d3f50;
+  --green: #00e676;
+  --green-dim: #00e67622;
+  --blue: #40c4ff;
+  --orange: #ff9100;
+  --red: #ff5252;
+  --text: #cdd9e5;
+  --text-dim: #546e7a;
+  --text-bright: #e8f4fd;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Syne', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Grid background */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 0.3;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Glow orb */
+body::after {
+  content: '';
+  position: fixed;
+  top: -200px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, #00e67615 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.wrap { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; padding: 0 20px 60px; }
+
+/* ── HEADER ── */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28px 0 48px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 48px;
+}
+
+.logo {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: -1px;
+}
+.logo .bracket { color: var(--text-dim); }
+.logo .name { color: var(--green); }
+.logo .arrow { color: var(--blue); }
+
+.badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 10px;
+  letter-spacing: 1px;
+}
+
+/* ── HERO ── */
+.hero { text-align: center; margin-bottom: 52px; }
+.hero h1 {
+  font-size: clamp(32px, 6vw, 56px);
+  font-weight: 800;
+  color: var(--text-bright);
+  line-height: 1.1;
+  margin-bottom: 16px;
+  letter-spacing: -2px;
+}
+.hero h1 span { color: var(--green); }
+.hero p {
+  color: var(--text-dim);
+  font-size: 16px;
+  font-weight: 400;
+  max-width: 480px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+/* ── CONFIG SECTION ── */
+.config-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  margin-bottom: 16px;
+  user-select: none;
+}
+.config-toggle span {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.config-toggle .arrow-icon {
+  color: var(--text-dim);
+  transition: transform .2s;
+  font-size: 10px;
+}
+.config-toggle.open .arrow-icon { transform: rotate(90deg); }
+
+.config-panel {
+  display: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 24px;
+  gap: 16px;
+  grid-template-columns: 1fr 1fr;
+}
+.config-panel.show { display: grid; }
+
+/* ── CARD ── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px;
+  margin-bottom: 20px;
+  transition: border-color .2s;
+}
+.card:focus-within { border-color: var(--border-hover); }
+
+.card-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--green);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.card-label::before {
+  content: '';
+  display: block;
+  width: 8px;
+  height: 8px;
+  background: var(--green);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--green);
+}
+
+/* ── FIELD ── */
+.field { margin-bottom: 18px; }
+.field:last-child { margin-bottom: 0; }
+
+label {
+  display: block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+input[type="text"], input[type="password"] {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  color: var(--text-bright);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  outline: none;
+  transition: border-color .2s, box-shadow .2s;
+}
+input:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px var(--green-dim);
+}
+input::placeholder { color: var(--text-dim); }
+
+/* ── EDITOR ── */
+.editor-wrap {
+  position: relative;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: border-color .2s, box-shadow .2s;
+}
+.editor-wrap:focus-within {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px var(--green-dim);
+}
+
+.editor-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  background: #0a0f14;
+  border-bottom: 1px solid var(--border);
+}
+.dot-r { width:10px;height:10px;border-radius:50%;background:#ff5f57; }
+.dot-y { width:10px;height:10px;border-radius:50%;background:#febc2e; }
+.dot-g { width:10px;height:10px;border-radius:50%;background:#28c840; }
+.editor-filename {
+  margin-left: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+textarea {
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 16px;
+  color: #a8d8a8;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  resize: vertical;
+  min-height: 220px;
+  outline: none;
+  tab-size: 2;
+}
+
+/* ── BTN ── */
+.btn-generate {
+  width: 100%;
+  background: var(--green);
+  color: #020805;
+  border: none;
+  border-radius: 10px;
+  padding: 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform .1s, box-shadow .2s, background .2s;
+  margin-top: 8px;
+  position: relative;
+  overflow: hidden;
+}
+.btn-generate::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, #ffffff22, transparent);
+}
+.btn-generate:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px #00e67640;
+}
+.btn-generate:active { transform: translateY(0); }
+.btn-generate:disabled {
+  background: var(--border);
+  color: var(--text-dim);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* ── PROGRESS ── */
+#progressCard { display: none; }
+#progressCard.show { display: block; }
+
+.steps { display: flex; flex-direction: column; gap: 8px; }
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  transition: all .3s;
+}
+.step-icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
+.step-text { flex: 1; }
+.step-time { color: var(--text-dim); font-size: 11px; }
+
+.step.wait { color: var(--text-dim); }
+.step.active {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: #40c4ff08;
+  animation: stepPulse 1.5s ease-in-out infinite;
+}
+.step.done {
+  border-color: var(--green);
+  color: var(--green);
+  background: var(--green-dim);
+}
+.step.error {
+  border-color: var(--red);
+  color: var(--red);
+  background: #ff525208;
+}
+
+@keyframes stepPulse {
+  0%,100% { box-shadow: 0 0 0 0 #40c4ff20; }
+  50% { box-shadow: 0 0 0 6px #40c4ff00; }
+}
+
+/* ── LOG ── */
+.log-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  max-height: 140px;
+  overflow-y: auto;
+  margin-top: 16px;
+  line-height: 1.8;
+}
+.log-box .log-line { display: block; }
+.log-box .log-line.ok { color: var(--green); }
+.log-box .log-line.err { color: var(--red); }
+.log-box .log-line.info { color: var(--blue); }
+
+/* ── DOWNLOAD ── */
+#downloadCard { display: none; }
+#downloadCard.show { display: block; }
+
+.download-inner {
+  text-align: center;
+  padding: 12px 0;
+}
+.apk-icon {
+  font-size: 52px;
+  margin-bottom: 16px;
+  display: block;
+  filter: drop-shadow(0 0 20px #00e67650);
+}
+.download-inner h3 {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-bright);
+  margin-bottom: 6px;
+}
+.download-inner p { color: var(--text-dim); font-size: 13px; margin-bottom: 24px; }
+
+.btn-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: #1a3a28;
+  color: var(--green);
+  border: 1px solid var(--green);
+  border-radius: 10px;
+  padding: 14px 32px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all .2s;
+  letter-spacing: 1px;
+}
+.btn-download:hover {
+  background: var(--green-dim);
+  box-shadow: 0 0 24px #00e67630;
+  transform: translateY(-2px);
+}
+
+.btn-new {
+  display: block;
+  margin: 16px auto 0;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 24px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all .2s;
+  letter-spacing: 1px;
+}
+.btn-new:hover { border-color: var(--border-hover); color: var(--text); }
+
+/* ── FOOTER ── */
+footer {
+  text-align: center;
+  padding: 32px 0 0;
+  border-top: 1px solid var(--border);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+footer a { color: var(--green); text-decoration: none; }
+
+/* ── TIMER ── */
+#timer {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+  margin-top: 12px;
+}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ── ANIM ── */
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(16px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+.card { animation: fadeUp .4s ease both; }
+.card:nth-child(2) { animation-delay:.1s; }
+.card:nth-child(3) { animation-delay:.2s; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <span class="bracket">[</span><span class="name">html</span><span class="arrow">→</span><span class="name">apk</span><span class="bracket">]</span>
+    </div>
+    <div class="badge">by GusmaoCoder</div>
+  </header>
+
+  <!-- HERO -->
+  <div class="hero">
+    <h1>Cole seu HTML.<br><span>Receba um APK.</span></h1>
+    <p>Converta qualquer página HTML em um aplicativo Android instalável, automaticamente via GitHub Actions.</p>
+  </div>
+
+  <!-- CONFIG -->
+  <div class="config-toggle" id="configToggle" onclick="toggleConfig()">
+    <span class="arrow-icon">▶</span>
+    <span>⚙ Configuração do GitHub</span>
+  </div>
+
+  <div class="config-panel" id="configPanel">
+    <div class="field">
+      <label>GitHub Token (ghp_...)</label>
+      <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Usuário do GitHub</label>
+      <input type="text" id="ghUser" placeholder="seu-usuario">
+    </div>
+    <div class="field">
+      <label>Nome do Template Repo</label>
+      <input type="text" id="ghTemplate" placeholder="html-to-apk-template" value="html-to-apk-template">
+    </div>
+    <div class="field" style="display:flex;align-items:flex-end;">
+      <button class="btn-generate" style="margin:0;font-size:12px;padding:12px;" onclick="saveConfig()">SALVAR CONFIG</button>
+    </div>
+  </div>
+
+  <!-- FORM -->
+  <div class="card" id="formCard">
+    <div class="card-label">Novo App</div>
+
+    <div class="field">
+      <label>Nome do Aplicativo</label>
+      <input type="text" id="appName" placeholder="Ex: Calculadora Gospel, Devocional Diário...">
+    </div>
+
+    <div class="field">
+      <label>Código HTML do App</label>
+      <div class="editor-wrap">
+        <div class="editor-bar">
+          <div class="dot-r"></div>
+          <div class="dot-y"></div>
+          <div class="dot-g"></div>
+          <span class="editor-filename">index.html</span>
+        </div>
+        <textarea id="htmlCode" spellcheck="false" placeholder="<!DOCTYPE html>
+<html lang=&quot;pt-BR&quot;>
+<head>
+  <meta charset=&quot;UTF-8&quot;>
+  <meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1.0&quot;>
+  <title>Meu App</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 40px; }
+    h1 { color: #00e676; }
+  </style>
+</head>
+<body>
+  <h1>Olá Mundo! 🚀</h1>
+  <p>Cole seu HTML aqui...</p>
+</body>
+</html>"></textarea>
+      </div>
+    </div>
+
+    <button class="btn-generate" id="btnGenerate" onclick="startGeneration()">
+      ⚡ GERAR APK AGORA
+    </button>
+  </div>
+
+  <!-- PROGRESS -->
+  <div class="card" id="progressCard">
+    <div class="card-label">Compilando</div>
+
+    <div class="steps">
+      <div class="step wait" id="s1">
+        <span class="step-icon">📁</span>
+        <span class="step-text">Criando repositório no GitHub</span>
+        <span class="step-time" id="t1"></span>
+      </div>
+      <div class="step wait" id="s2">
+        <span class="step-icon">💉</span>
+        <span class="step-text">Injetando HTML no projeto Android</span>
+        <span class="step-time" id="t2"></span>
+      </div>
+      <div class="step wait" id="s3">
+        <span class="step-icon">⚙️</span>
+        <span class="step-text">GitHub Actions compilando o APK</span>
+        <span class="step-time" id="t3"></span>
+      </div>
+      <div class="step wait" id="s4">
+        <span class="step-icon">📦</span>
+        <span class="step-text">Preparando download</span>
+        <span class="step-time" id="t4"></span>
+      </div>
+    </div>
+
+    <div id="timer">⏱ 0s decorridos</div>
+
+    <div class="log-box" id="logBox"></div>
+  </div>
+
+  <!-- DOWNLOAD -->
+  <div class="card" id="downloadCard">
+    <div class="card-label">Concluído</div>
+    <div class="download-inner">
+      <span class="apk-icon">📱</span>
+      <h3 id="dlAppName">App pronto!</h3>
+      <p id="dlInfo">APK gerado com sucesso via GitHub Actions</p>
+      <a id="dlBtn" class="btn-download" href="#" target="_blank">
+        ⬇ BAIXAR APK
+      </a>
+      <button class="btn-new" onclick="resetForm()">+ Gerar outro APK</button>
+    </div>
+  </div>
+
+  <footer>
+    <p>html2apk • GusmaoCoder • <a href="https://github.com/og84807-prog" target="_blank">github.com/og84807-prog</a></p>
+  </footer>
+
+</div>
+
+<script>
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+const CFG_KEY = 'html2apk_config';
+
+function loadConfig() {
+  try { return JSON.parse(localStorage.getItem(CFG_KEY)) || {}; } catch { return {}; }
+}
+
+function saveConfig() {
+  const cfg = {
+    token: document.getElementById('ghToken').value.trim(),
+    user:  document.getElementById('ghUser').value.trim(),
+    template: document.getElementById('ghTemplate').value.trim() || 'html-to-apk-template'
+  };
+  localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
+  log('✓ Configuração salva!', 'ok');
+  toggleConfig();
+}
+
+function toggleConfig() {
+  const panel  = document.getElementById('configPanel');
+  const toggle = document.getElementById('configToggle');
+  const open   = panel.classList.toggle('show');
+  toggle.classList.toggle('open', open);
+
+  if (open) {
+    const cfg = loadConfig();
+    if (cfg.token)    document.getElementById('ghToken').value    = cfg.token;
+    if (cfg.user)     document.getElementById('ghUser').value     = cfg.user;
+    if (cfg.template) document.getElementById('ghTemplate').value = cfg.template;
+  }
+}
+
+// ─── UTILS ────────────────────────────────────────────────────────────────────
+function log(msg, type = '') {
+  const box = document.getElementById('logBox');
+  const line = document.createElement('span');
+  line.className = 'log-line' + (type ? ' ' + type : '');
+  const now = new Date().toLocaleTimeString('pt-BR');
+  line.textContent = `[${now}] ${msg}`;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+}
+
+function setStep(id, state, time = '') {
+  const el = document.getElementById(id);
+  el.className = 'step ' + state;
+  const icons = { wait:'⏳', active:'🔄', done:'✅', error:'❌' };
+  const icon  = { s1:'📁', s2:'💉', s3:'⚙️', s4:'📦' };
+  el.querySelector('.step-icon').textContent = state === 'done' ? '✅' : state === 'error' ? '❌' : state === 'active' ? '🔄' : icon[id];
+  if (time) document.getElementById('t' + id.replace('s','')).textContent = time + 's';
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function slugify(str) {
+  return str.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .substring(0, 40);
+}
+
+// ─── GITHUB API ───────────────────────────────────────────────────────────────
+async function ghFetch(url, method = 'GET', body = null, token) {
+  const opts = {
+    method,
+    headers: {
+      'Authorization': `token ${token}`,
+      'Accept': 'application/vnd.github.v3+json',
+      'Content-Type': 'application/json'
+    }
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch('https://api.github.com' + url, opts);
+  const data = await r.json();
+  return { status: r.status, data };
+}
+
+async function criarRepo(token, user, template, nomeRepo) {
+  const r = await ghFetch(`/repos/${user}/${template}/generate`, 'POST', {
+    owner: user, name: nomeRepo,
+    description: 'Gerado pelo HTML2APK',
+    private: true,
+    include_all_branches: false
+  }, token);
+  return r;
+}
+
+async function getFileSha(token, user, repo, path) {
+  const r = await ghFetch(`/repos/${user}/${repo}/contents/${path}`, 'GET', null, token);
+  return r.status === 200 ? r.data.sha : null;
+}
+
+async function updateFile(token, user, repo, path, content, message) {
+  const sha = await getFileSha(token, user, repo, path);
+  const b64 = btoa(unescape(encodeURIComponent(content)));
+  const body = { message, content: b64 };
+  if (sha) body.sha = sha;
+  const r = await ghFetch(`/repos/${user}/${repo}/contents/${path}`, 'PUT', body, token);
+  return r.status === 200 || r.status === 201;
+}
+
+async function aguardarBuild(token, user, repo, onLog) {
+  const maxTentativas = 60;
+  for (let i = 0; i < maxTentativas; i++) {
+    await sleep(15000);
+    const r = await ghFetch(`/repos/${user}/${repo}/actions/runs`, 'GET', null, token);
+    if (r.status !== 200) continue;
+    const runs = r.data.workflow_runs || [];
+    if (!runs.length) { onLog('Aguardando Actions iniciar...'); continue; }
+    const run = runs[0];
+    onLog(`Status: ${run.status} | Tentativa ${i+1}`);
+    if (run.status === 'completed') {
+      return { id: run.id, success: run.conclusion === 'success', conclusion: run.conclusion };
+    }
+  }
+  return { id: null, success: false, conclusion: 'timeout' };
+}
+
+async function getArtifactUrl(token, user, repo, runId) {
+  const r = await ghFetch(`/repos/${user}/${repo}/actions/runs/${runId}/artifacts`, 'GET', null, token);
+  if (r.status !== 200 || !r.data.artifacts?.length) return null;
+  const art = r.data.artifacts[0];
+  return `https://github.com/${user}/${repo}/actions/runs/${runId}/artifacts/${art.id}`;
+}
+
+// ─── GERAÇÃO PRINCIPAL ────────────────────────────────────────────────────────
+let timerInterval = null;
+let startTime = null;
+
+function startTimer() {
+  startTime = Date.now();
+  timerInterval = setInterval(() => {
+    const s = Math.floor((Date.now() - startTime) / 1000);
+    document.getElementById('timer').textContent = `⏱ ${s}s decorridos`;
+  }, 1000);
+}
+
+function stopTimer() { clearInterval(timerInterval); }
+
+async function startGeneration() {
+  const cfg = loadConfig();
+  const appName = document.getElementById('appName').value.trim();
+  const html    = document.getElementById('htmlCode').value.trim();
+
+  // Validações
+  if (!cfg.token || !cfg.user) {
+    alert('⚠️ Configure seu Token e Usuário do GitHub primeiro!\nClique em "⚙ Configuração do GitHub" acima.');
+    document.getElementById('configToggle').click();
+    return;
+  }
+  if (!appName) { alert('Digite o nome do app!'); return; }
+  if (!html)    { alert('Cole o código HTML!'); return; }
+
+  const { token, user, template } = cfg;
+  const slug     = slugify(appName);
+  const ts       = Date.now().toString().slice(-6);
+  const nomeRepo = `app-${slug}-${ts}`;
+
+  // UI: mostrar progresso
+  document.getElementById('btnGenerate').disabled = true;
+  document.getElementById('progressCard').classList.add('show');
+  document.getElementById('downloadCard').classList.remove('show');
+  document.getElementById('logBox').innerHTML = '';
+  startTimer();
+
+  const t = {};
+
+  // ── STEP 1: Criar repo ──
+  setStep('s1', 'active');
+  log(`Criando repo: ${nomeRepo}...`, 'info');
+  t.s1 = Math.floor((Date.now() - startTime)/1000);
+
+  const rCreate = await criarRepo(token, user, template, nomeRepo);
+  if (rCreate.status !== 201) {
+    log(`Erro ao criar repo: ${rCreate.status} — ${JSON.stringify(rCreate.data)}`, 'err');
+    setStep('s1', 'error');
+    stopTimer();
+    document.getElementById('btnGenerate').disabled = false;
+    return;
+  }
+  setStep('s1', 'done', Math.floor((Date.now()-startTime)/1000) - t.s1);
+  log(`✓ Repo criado: ${user}/${nomeRepo}`, 'ok');
+
+  // Aguardar init
+  log('Aguardando repositório inicializar (12s)...', 'info');
+  await sleep(12000);
+
+  // ── STEP 2: Injetar HTML ──
+  setStep('s2', 'active');
+  log('Injetando HTML no strings.xml...', 'info');
+  t.s2 = Math.floor((Date.now() - startTime)/1000);
+
+  const stringsXml = `<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">${appName.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</string>
+    <string name="html_content"><![CDATA[${html}]]></string>
+</resources>`;
+
+  const okInject = await updateFile(
+    token, user, nomeRepo,
+    'app/src/main/res/values/strings.xml',
+    stringsXml,
+    `chore: inject HTML for ${appName}`
+  );
+
+  if (!okInject) {
+    log('Erro ao injetar HTML!', 'err');
+    setStep('s2', 'error');
+    stopTimer();
+    document.getElementById('btnGenerate').disabled = false;
+    return;
+  }
+  setStep('s2', 'done', Math.floor((Date.now()-startTime)/1000) - t.s2);
+  log('✓ HTML injetado com sucesso', 'ok');
+
+  // ── STEP 3: Aguardar build ──
+  setStep('s3', 'active');
+  log('Aguardando GitHub Actions compilar (pode levar ~5 min)...', 'info');
+  t.s3 = Math.floor((Date.now() - startTime)/1000);
+
+  const build = await aguardarBuild(token, user, nomeRepo, (msg) => log(msg));
+
+  if (!build.success) {
+    log(`Build falhou: ${build.conclusion}`, 'err');
+    log(`Ver log: https://github.com/${user}/${nomeRepo}/actions`, 'info');
+    setStep('s3', 'error');
+    stopTimer();
+    document.getElementById('btnGenerate').disabled = false;
+    return;
+  }
+  setStep('s3', 'done', Math.floor((Date.now()-startTime)/1000) - t.s3);
+  log('✓ Build concluído com sucesso!', 'ok');
+
+  // ── STEP 4: Download ──
+  setStep('s4', 'active');
+  log('Obtendo link de download...', 'info');
+
+  const dlUrl = await getArtifactUrl(token, user, nomeRepo, build.id);
+  setStep('s4', 'done', Math.floor((Date.now()-startTime)/1000));
+  stopTimer();
+
+  // Mostrar download
+  document.getElementById('progressCard').classList.remove('show');
+  document.getElementById('downloadCard').classList.add('show');
+  document.getElementById('dlAppName').textContent = `${appName} — pronto!`;
+  document.getElementById('dlInfo').textContent = `Repo: ${user}/${nomeRepo}`;
+
+  const dlBtn = document.getElementById('dlBtn');
+  if (dlUrl) {
+    dlBtn.href = dlUrl;
+    dlBtn.textContent = '⬇ BAIXAR APK';
+  } else {
+    dlBtn.href = `https://github.com/${user}/${nomeRepo}/actions`;
+    dlBtn.textContent = '🔗 VER NO GITHUB';
+  }
+
+  log(`✓ CONCLUÍDO em ${Math.floor((Date.now()-startTime)/1000)}s`, 'ok');
+  document.getElementById('btnGenerate').disabled = false;
+}
+
+function resetForm() {
+  document.getElementById('appName').value = '';
+  document.getElementById('htmlCode').value = '';
+  document.getElementById('progressCard').classList.remove('show');
+  document.getElementById('downloadCard').classList.remove('show');
+  document.getElementById('logBox').innerHTML = '';
+  document.getElementById('timer').textContent = '⏱ 0s decorridos';
+  ['s1','s2','s3','s4'].forEach(s => setStep(s, 'wait'));
+}
+
+// Init
+window.addEventListener('load', () => {
+  const cfg = loadConfig();
+  if (!cfg.token) {
+    document.getElementById('configPanel').classList.add('show');
+    document.getElementById('configToggle').classList.add('open');
+  }
+});
+</script>
+</body>
+</html>
