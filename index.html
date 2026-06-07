@@ -178,7 +178,7 @@ header {
   box-shadow: 0 0 8px var(--green);
 }
 
-/* ─ FIELD ── */
+/* ── FIELD ── */
 .field { margin-bottom: 18px; }
 .field:last-child { margin-bottom: 0; }
 
@@ -295,7 +295,7 @@ textarea {
   box-shadow: none;
 }
 
-/* ── PROGRESS ─ */
+/* ── PROGRESS ── */
 #progressCard { display: none; }
 #progressCard.show { display: block; }
 
@@ -445,7 +445,7 @@ footer a { color: var(--green); text-decoration: none; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-/* ─ ANIM ── */
+/* ── ANIM ── */
 @keyframes fadeUp {
   from { opacity:0; transform:translateY(16px); }
   to   { opacity:1; transform:translateY(0); }
@@ -559,7 +559,7 @@ footer a { color: var(--green); text-decoration: none; }
         <span class="step-time" id="t3"></span>
       </div>
       <div class="step wait" id="s4">
-        <span class="step-icon"></span>
+        <span class="step-icon">📦</span>
         <span class="step-text">Preparando download</span>
         <span class="step-time" id="t4"></span>
       </div>
@@ -637,8 +637,8 @@ function log(msg, type = '') {
 function setStep(id, state, time = '') {
   const el = document.getElementById(id);
   el.className = 'step ' + state;
-  const icons = { wait:'⏳', active:'🔄', done:'✅', error:'' };
-  const icon  = { s1:'📁', s2:'💉', s3:'⚙️', s4:'' };
+  const icons = { wait:'⏳', active:'🔄', done:'✅', error:'❌' };
+  const icon  = { s1:'📁', s2:'💉', s3:'⚙️', s4:'📦' };
   el.querySelector('.step-icon').textContent = state === 'done' ? '✅' : state === 'error' ? '❌' : state === 'active' ? '🔄' : icon[id];
   if (time) document.getElementById('t' + id.replace('s','')).textContent = time + 's';
 }
@@ -651,16 +651,6 @@ function slugify(str) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
     .substring(0, 40);
-}
-
-// ─── NOVA FUNÇÃO DE ESCAPE PARA XML (CORREÇÃO 2) ──────────────────────────────
-function escapeForXml(text) {
-    return text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;'); // Evita erro de "unicode inválido"
 }
 
 // ─── GITHUB API ───────────────────────────────────────────────────────────────
@@ -735,7 +725,7 @@ function startTimer() {
   startTime = Date.now();
   timerInterval = setInterval(() => {
     const s = Math.floor((Date.now() - startTime) / 1000);
-    document.getElementById('timer').textContent = ` ${s}s decorridos`;
+    document.getElementById('timer').textContent = `⏱ ${s}s decorridos`;
   }, 1000);
 }
 
@@ -748,7 +738,7 @@ async function startGeneration() {
 
   // Validações
   if (!cfg.token || !cfg.user) {
-    alert('️ Configure seu Token e Usuário do GitHub primeiro!\nClique em "⚙ Configuração do GitHub" acima.');
+    alert('⚠️ Configure seu Token e Usuário do GitHub primeiro!\nClique em "⚙ Configuração do GitHub" acima.');
     document.getElementById('configToggle').click();
     return;
   }
@@ -789,27 +779,27 @@ async function startGeneration() {
   log('Aguardando repositório inicializar (12s)...', 'info');
   await sleep(12000);
 
-  // ── STEP 2: Injetar HTML (COM CORREÇÃO DE ESCAPE) ──
+  // ── STEP 2: Injetar HTML direto em assets/index.html (sem XML, sem escape) ──
   setStep('s2', 'active');
-  log('Injetando HTML no strings.xml...', 'info');
+  log('Injetando HTML em assets/index.html...', 'info');
   t.s2 = Math.floor((Date.now() - startTime)/1000);
 
-  // Escapa ]]> dentro do HTML pra não quebrar o CDATA do XML
-  let escapedHtml = html.replace(/\]\]>/g, ']]]]><![CDATA[>');
-  
-  // APLICA O ESCAPE SEGURO PARA XML (CORREÇÃO 2)
-  escapedHtml = escapeForXml(escapedHtml);
+  // Atualizar strings.xml apenas com o nome do app (sem HTML)
+  const safeAppName = appName.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const stringsXml = `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <string name="app_name">${safeAppName}</string>\n</resources>`;
 
-  const stringsXml = `<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">${escapeForXml(appName)}</string>
-    <string name="html_content"><![CDATA[${escapedHtml}]]></string>
-</resources>`;
-
-  const okInject = await updateFile(
+  await updateFile(
     token, user, nomeRepo,
     'app/src/main/res/values/strings.xml',
     stringsXml,
+    `chore: set app name to ${appName}`
+  );
+
+  // Salvar o HTML puro no assets — sem nenhum escape, funciona com qualquer HTML
+  const okInject = await updateFile(
+    token, user, nomeRepo,
+    'app/src/main/assets/index.html',
+    html,
     `chore: inject HTML for ${appName}`
   );
 
@@ -823,7 +813,7 @@ async function startGeneration() {
   setStep('s2', 'done', Math.floor((Date.now()-startTime)/1000) - t.s2);
   log('✓ HTML injetado com sucesso', 'ok');
 
-  // ─ STEP 3: Aguardar build ──
+  // ── STEP 3: Aguardar build ──
   setStep('s3', 'active');
   log('Aguardando GitHub Actions compilar (pode levar ~5 min)...', 'info');
   t.s3 = Math.floor((Date.now() - startTime)/1000);
