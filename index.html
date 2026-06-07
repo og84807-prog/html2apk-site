@@ -529,4 +529,351 @@ footer a { color: var(--green); text-decoration: none; }
       </div>
     </div>
 
-    <button class="btn-generate"
+    <button class="btn-generate" id="btnGenerate" onclick="startGeneration()">
+      ⚡ GERAR APK AGORA
+    </button>
+  </div>
+
+  <div class="card" id="progressCard">
+    <div class="card-label">Compilando</div>
+
+    <div class="steps">
+      <div class="step wait" id="s1">
+        <span class="step-icon">📁</span>
+        <span class="step-text">Criando repositório no GitHub</span>
+        <span class="step-time" id="t1"></span>
+      </div>
+      <div class="step wait" id="s2">
+        <span class="step-icon">💉</span>
+        <span class="step-text">Injetando HTML no projeto Android</span>
+        <span class="step-time" id="t2"></span>
+      </div>
+      <div class="step wait" id="s3">
+        <span class="step-icon">⚙️</span>
+        <span class="step-text">GitHub Actions compilando o APK</span>
+        <span class="step-time" id="t3"></span>
+      </div>
+      <div class="step wait" id="s4">
+        <span class="step-icon">📦</span>
+        <span class="step-text">Preparando download</span>
+        <span class="step-time" id="t4"></span>
+      </div>
+    </div>
+
+    <div id="timer">⏱ 0s decorridos</div>
+
+    <div class="log-box" id="logBox"></div>
+  </div>
+
+  <div class="card" id="downloadCard">
+    <div class="card-label">Concluído</div>
+    <div class="download-inner">
+      <span class="apk-icon">📱</span>
+      <h3 id="dlAppName">App pronto!</h3>
+      <p id="dlInfo">APK gerado com sucesso via GitHub Actions</p>
+      <a id="dlBtn" class="btn-download" href="#" target="_blank">
+        ⬇ BAIXAR APK
+      </a>
+      <button class="btn-new" onclick="resetForm()">+ Gerar outro APK</button>
+    </div>
+  </div>
+
+  <footer>
+    <p>html2apk • GusmaoCoder • <a href="https://github.com/og84807-prog" target="_blank">github.com/og84807-prog</a></p>
+  </footer>
+
+</div>
+
+<script>
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+const CFG_KEY = 'html2apk_config';
+
+function loadConfig() {
+  try { return JSON.parse(localStorage.getItem(CFG_KEY)) || {}; } catch { return {}; }
+}
+
+function saveConfig() {
+  const cfg = {
+    token: document.getElementById('ghToken').value.trim(),
+    user:  document.getElementById('ghUser').value.trim(),
+    template: document.getElementById('ghTemplate').value.trim() || 'html-to-apk-template'
+  };
+  localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
+  log('✓ Configuração salva!', 'ok');
+  toggleConfig();
+}
+
+function toggleConfig() {
+  const panel  = document.getElementById('configPanel');
+  const toggle = document.getElementById('configToggle');
+  const open   = panel.classList.toggle('show');
+  toggle.classList.toggle('open', open);
+
+  if (open) {
+    const cfg = loadConfig();
+    if (cfg.token)    document.getElementById('ghToken').value    = cfg.token;
+    if (cfg.user)     document.getElementById('ghUser').value     = cfg.user;
+    if (cfg.template) document.getElementById('ghTemplate').value = cfg.template;
+  }
+}
+
+// ─── UTILS ────────────────────────────────────────────────────────────────────
+function log(msg, type = '') {
+  const box = document.getElementById('logBox');
+  const line = document.createElement('span');
+  line.className = 'log-line' + (type ? ' ' + type : '');
+  const now = new Date().toLocaleTimeString('pt-BR');
+  line.textContent = `[${now}] ${msg}`;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+}
+
+function setStep(id, state, time = '') {
+  const el = document.getElementById(id);
+  el.className = 'step ' + state;
+  const icons = { wait:'⏳', active:'🔄', done:'✅', error:'❌' };
+  const icon  = { s1:'📁', s2:'💉', s3:'⚙️', s4:'📦' };
+  el.querySelector('.step-icon').textContent = state === 'done' ? '✅' : state === 'error' ? '❌' : state === 'active' ? '🔄' : icon[id];
+  if (time) document.getElementById('t' + id.replace('s','')).textContent = time + 's';
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function slugify(str) {
+  return str.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .substring(0, 40);
+}
+
+// ─── GITHUB API ───────────────────────────────────────────────────────────────
+async function ghFetch(url, method = 'GET', body = null, token) {
+  const opts = {
+    method,
+    headers: {
+      'Authorization': `token ${token}`,
+      'Accept': 'application/vnd.github.v3+json',
+      'Content-Type': 'application/json'
+    }
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch('https://api.github.com' + url, opts);
+  const data = await r.json();
+  return { status: r.status, data };
+}
+
+async function criarRepo(token, user, template, nomeRepo) {
+  const r = await ghFetch(`/repos/${user}/${template}/generate`, 'POST', {
+    owner: user, name: nomeRepo,
+    description: 'Gerado pelo HTML2APK',
+    private: true,
+    include_all_branches: false
+  }, token);
+  return r;
+}
+
+async function getFileSha(token, user, repo, path) {
+  const r = await ghFetch(`/repos/${user}/${repo}/contents/${path}`, 'GET', null, token);
+  return r.status === 200 ? r.data.sha : null;
+}
+
+async function updateFile(token, user, repo, path, content, message) {
+  const sha = await getFileSha(token, user, repo, path);
+  
+  const bytes = new TextEncoder().encode(content);
+  const binString = Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
+  const b64 = btoa(binString);
+
+  const body = { message, content: b64 };
+  if (sha) body.sha = sha;
+  const r = await ghFetch(`/repos/${user}/${repo}/contents/${path}`, 'PUT', body, token);
+  return r.status === 200 || r.status === 201;
+}
+
+async function aguardarBuild(token, user, repo, onLog) {
+  const maxTentativas = 60;
+  for (let i = 0; i < maxTentativas; i++) {
+    await sleep(15000);
+    const r = await ghFetch(`/repos/${user}/${repo}/actions/runs`, 'GET', null, token);
+    if (r.status !== 200) continue;
+    const runs = r.data.workflow_runs || [];
+    if (!runs.length) { onLog('Aguardando Actions iniciar...'); continue; }
+    const run = runs[0];
+    onLog(`Status: ${run.status} | Tentativa ${i+1}`);
+    if (run.status === 'completed') {
+      return { id: run.id, success: run.conclusion === 'success', conclusion: run.conclusion };
+    }
+  }
+  return { id: null, success: false, conclusion: 'timeout' };
+}
+
+async function getArtifactUrl(token, user, repo, runId) {
+  const r = await ghFetch(`/repos/${user}/${repo}/actions/runs/${runId}/artifacts`, 'GET', null, token);
+  if (r.status !== 200 || !r.data.artifacts?.length) return null;
+  const art = r.data.artifacts[0];
+  return `https://github.com/${user}/${repo}/actions/runs/${runId}/artifacts/${art.id}`;
+}
+
+// ─── GERAÇÃO PRINCIPAL ────────────────────────────────────────────────────────
+let timerInterval = null;
+let startTime = null;
+
+function startTimer() {
+  startTime = Date.now();
+  timerInterval = setInterval(() => {
+    const s = Math.floor((Date.now() - startTime) / 1000);
+    document.getElementById('timer').textContent = `⏱ ${s}s decorridos`;
+  }, 1000);
+}
+
+function stopTimer() { clearInterval(timerInterval); }
+
+async function startGeneration() {
+  const cfg = loadConfig();
+  const appName = document.getElementById('appName').value.trim();
+  const html    = document.getElementById('htmlCode').value.trim();
+
+  // Validações
+  if (!cfg.token || !cfg.user) {
+    alert('⚠️ Configure seu Token e Usuário do GitHub primeiro!\nClique em "⚙ Configuração do GitHub" acima.');
+    document.getElementById('configToggle').click();
+    return;
+  }
+  if (!appName) { alert('Digite o nome do app!'); return; }
+  if (!html)    { alert('Cole o código HTML!'); return; }
+
+  const { token, user, template } = cfg;
+  const slug     = slugify(appName);
+  const ts       = Date.now().toString().slice(-6);
+  const nomeRepo = `app-${slug}-${ts}`;
+
+  // UI: mostrar progresso
+  document.getElementById('btnGenerate').disabled = true;
+  document.getElementById('progressCard').classList.add('show');
+  document.getElementById('downloadCard').classList.remove('show');
+  document.getElementById('logBox').innerHTML = '';
+  startTimer();
+
+  const t = {};
+
+  // ── STEP 1: Criar repo ──
+  setStep('s1', 'active');
+  log(`Criando repo: ${nomeRepo}...`, 'info');
+  t.s1 = Math.floor((Date.now() - startTime)/1000);
+
+  const rCreate = await criarRepo(token, user, template, nomeRepo);
+  if (rCreate.status !== 201) {
+    log(`Erro ao criar repo: ${rCreate.status} — ${JSON.stringify(rCreate.data)}`, 'err');
+    setStep('s1', 'error');
+    stopTimer();
+    document.getElementById('btnGenerate').disabled = false;
+    return;
+  }
+  setStep('s1', 'done', Math.floor((Date.now()-startTime)/1000) - t.s1);
+  log(`✓ Repo criado: ${user}/${nomeRepo}`, 'ok');
+
+  // Aguardar init
+  log('Aguardando repositório inicializar (12s)...', 'info');
+  await sleep(12000);
+
+  // ── STEP 2: Injetar HTML e Configurar Recursos ──
+  setStep('s2', 'active');
+  log('Configurando strings.xml...', 'info');
+  t.s2 = Math.floor((Date.now() - startTime)/1000);
+
+  // Limpeza cirúrgica: Remove de vez a tag 'html_content' que causava erro no Gradle
+  const stringsXml = `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <string name="app_name"><![CDATA[${appName}]]></string>\n</resources>`;
+
+  await updateFile(
+    token, user, nomeRepo,
+    'app/src/main/res/values/strings.xml',
+    stringsXml,
+    `chore: set app name to ${appName}`
+  );
+
+  log('Injetando HTML puro em assets/index.html...', 'info');
+  const okInject = await updateFile(
+    token, user, nomeRepo,
+    'app/src/main/assets/index.html',
+    html,
+    `chore: inject HTML for ${appName}`
+  );
+
+  if (!okInject) {
+    log('Erro ao injetar HTML!', 'err');
+    setStep('s2', 'error');
+    stopTimer();
+    document.getElementById('btnGenerate').disabled = false;
+    return;
+  }
+  setStep('s2', 'done', Math.floor((Date.now()-startTime)/1000) - t.s2);
+  log('✓ Recursos configurados com sucesso', 'ok');
+
+  // ── STEP 3: Aguardar build ──
+  setStep('s3', 'active');
+  log('Aguardando GitHub Actions compilar (pode levar ~5 min)...', 'info');
+  t.s3 = Math.floor((Date.now() - startTime)/1000);
+
+  const build = await aguardarBuild(token, user, nomeRepo, (msg) => log(msg));
+
+  if (!build.success) {
+    log(`Build falhou: ${build.conclusion}`, 'err');
+    log(`Ver log: https://github.com/${user}/${nomeRepo}/actions`, 'info');
+    setStep('s3', 'error');
+    stopTimer();
+    document.getElementById('btnGenerate').disabled = false;
+    return;
+  }
+  setStep('s3', 'done', Math.floor((Date.now()-startTime)/1000) - t.s3);
+  log('✓ Build concluído com sucesso!', 'ok');
+
+  // ── STEP 4: Download ──
+  setStep('s4', 'active');
+  log('Obtendo link de download...', 'info');
+
+  const dlUrl = await getArtifactUrl(token, user, nomeRepo, build.id);
+  setStep('s4', 'done', Math.floor((Date.now()-startTime)/1000));
+  stopTimer();
+
+  // Mostrar download
+  document.getElementById('progressCard').classList.remove('show');
+  document.getElementById('downloadCard').classList.add('show');
+  document.getElementById('dlAppName').textContent = `${appName} — pronto!`;
+  document.getElementById('dlInfo').textContent = `Repo: ${user}/${nomeRepo}`;
+
+  const dlBtn = document.getElementById('dlBtn');
+  if (dlUrl) {
+    dlBtn.href = dlUrl;
+    dlBtn.textContent = '⬇ BAIXAR APK';
+  } else {
+    dlBtn.href = `https://github.com/${user}/${nomeRepo}/actions`;
+    dlBtn.textContent = '🔗 VER NO GITHUB';
+  }
+
+  log(`✓ CONCLUÍDO em ${Math.floor((Date.now()-startTime)/1000)}s`, 'ok');
+  document.getElementById('btnGenerate').disabled = false;
+}
+
+function resetForm() {
+  document.getElementById('appName').value = '';
+  document.getElementById('htmlCode').value = '';
+  document.getElementById('progressCard').classList.remove('remove');
+  document.getElementById('progressCard').classList.remove('show');
+  document.getElementById('downloadCard').classList.remove('show');
+  document.getElementById('logBox').innerHTML = '';
+  document.getElementById('timer').textContent = '⏱ 0s decorridos';
+  ['s1','s2','s3','s4'].forEach(s => setStep(s, 'wait'));
+}
+
+// Init
+window.addEventListener('load', () => {
+  const cfg = loadConfig();
+  if (!cfg.token) {
+    document.getElementById('configPanel').classList.add('show');
+    document.getElementById('configToggle').classList.add('open');
+  }
+});
+</script>
+</body>
+</html>
