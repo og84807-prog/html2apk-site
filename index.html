@@ -458,7 +458,6 @@ footer a { color: var(--green); text-decoration: none; }
 <body>
 <div class="wrap">
 
-  <!-- HEADER -->
   <header>
     <div class="logo">
       <span class="bracket">[</span><span class="name">html</span><span class="arrow">→</span><span class="name">apk</span><span class="bracket">]</span>
@@ -466,13 +465,11 @@ footer a { color: var(--green); text-decoration: none; }
     <div class="badge">by GusmaoCoder</div>
   </header>
 
-  <!-- HERO -->
   <div class="hero">
     <h1>Cole seu HTML.<br><span>Receba um APK.</span></h1>
     <p>Converta qualquer página HTML em um aplicativo Android instalável, automaticamente via GitHub Actions.</p>
   </div>
 
-  <!-- CONFIG -->
   <div class="config-toggle" id="configToggle" onclick="toggleConfig()">
     <span class="arrow-icon">▶</span>
     <span>⚙ Configuração do GitHub</span>
@@ -496,7 +493,6 @@ footer a { color: var(--green); text-decoration: none; }
     </div>
   </div>
 
-  <!-- FORM -->
   <div class="card" id="formCard">
     <div class="card-label">Novo App</div>
 
@@ -538,7 +534,6 @@ footer a { color: var(--green); text-decoration: none; }
     </button>
   </div>
 
-  <!-- PROGRESS -->
   <div class="card" id="progressCard">
     <div class="card-label">Compilando</div>
 
@@ -570,7 +565,6 @@ footer a { color: var(--green); text-decoration: none; }
     <div class="log-box" id="logBox"></div>
   </div>
 
-  <!-- DOWNLOAD -->
   <div class="card" id="downloadCard">
     <div class="card-label">Concluído</div>
     <div class="download-inner">
@@ -686,7 +680,12 @@ async function getFileSha(token, user, repo, path) {
 
 async function updateFile(token, user, repo, path, content, message) {
   const sha = await getFileSha(token, user, repo, path);
-  const b64 = btoa(unescape(encodeURIComponent(content)));
+  
+  // CORREÇÃO DEFINITIVA: Converte corretamente caracteres UTF-8 (acentos, emojis) para Base64 sem quebras
+  const bytes = new TextEncoder().encode(content);
+  const binString = Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
+  const b64 = btoa(binString);
+
   const body = { message, content: b64 };
   if (sha) body.sha = sha;
   const r = await ghFetch(`/repos/${user}/${repo}/contents/${path}`, 'PUT', body, token);
@@ -784,9 +783,8 @@ async function startGeneration() {
   log('Injetando HTML em assets/index.html...', 'info');
   t.s2 = Math.floor((Date.now() - startTime)/1000);
 
-  // Atualizar strings.xml apenas com o nome do app (sem HTML)
-  const safeAppName = appName.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const stringsXml = `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <string name="app_name">${safeAppName}</string>\n</resources>`;
+  // CORREÇÃO DEFINITIVA: strings.xml completamente blindado com CDATA contra qualquer quebra por caracteres especiais
+  const stringsXml = `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <string name="app_name"><![CDATA[${appName}]]></string>\n</resources>`;
 
   await updateFile(
     token, user, nomeRepo,
