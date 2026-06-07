@@ -458,6 +458,7 @@ footer a { color: var(--green); text-decoration: none; }
 <body>
 <div class="wrap">
 
+  <!-- HEADER -->
   <header>
     <div class="logo">
       <span class="bracket">[</span><span class="name">html</span><span class="arrow">→</span><span class="name">apk</span><span class="bracket">]</span>
@@ -465,11 +466,25 @@ footer a { color: var(--green); text-decoration: none; }
     <div class="badge">by GusmaoCoder</div>
   </header>
 
+  <!-- HERO -->
   <div class="hero">
     <h1>Cole seu HTML.<br><span>Receba um APK.</span></h1>
-    <p>Converta qualquer página HTML em um aplicativo Android instalável, automaticamente via GitHub Actions.</p>
+    <p>Converta HTML ou uma URL em um aplicativo Android instalável, automaticamente via GitHub Actions.</p>
   </div>
 
+  <!-- MODO TOGGLE -->
+  <div style="display:flex;gap:8px;margin-bottom:20px;">
+    <button id="btn-modo-html" onclick="setModo('html')"
+      style="flex:1;padding:12px;border-radius:10px;border:2px solid #00e676;background:#00e67622;color:#00e676;font-family:JetBrains Mono,monospace;font-size:13px;font-weight:800;cursor:pointer;letter-spacing:1px;">
+      📄 MODO HTML
+    </button>
+    <button id="btn-modo-url" onclick="setModo('url')"
+      style="flex:1;padding:12px;border-radius:10px;border:2px solid #1e2830;background:transparent;color:#546e7a;font-family:JetBrains Mono,monospace;font-size:13px;font-weight:800;cursor:pointer;letter-spacing:1px;">
+      🌐 MODO URL
+    </button>
+  </div>
+
+  <!-- CONFIG -->
   <div class="config-toggle" id="configToggle" onclick="toggleConfig()">
     <span class="arrow-icon">▶</span>
     <span>⚙ Configuração do GitHub</span>
@@ -493,6 +508,7 @@ footer a { color: var(--green); text-decoration: none; }
     </div>
   </div>
 
+  <!-- FORM -->
   <div class="card" id="formCard">
     <div class="card-label">Novo App</div>
 
@@ -501,7 +517,16 @@ footer a { color: var(--green); text-decoration: none; }
       <input type="text" id="appName" placeholder="Ex: Calculadora Gospel, Devocional Diário...">
     </div>
 
-    <div class="field">
+    <!-- CAMPO URL -->
+    <div class="field" id="campo-url" style="display:none;">
+      <label>URL do App (GitHub Pages, etc)</label>
+      <input type="text" id="appUrl" placeholder="https://og84807-prog.github.io/meu-app">
+      <div style="font-size:11px;color:#546e7a;margin-top:6px;font-family:JetBrains Mono,monospace;">
+        💡 O app vai carregar essa URL — atualize o site e todos os usuários veem na hora!
+      </div>
+    </div>
+
+    <div class="field" id="campo-html">
       <label>Código HTML do App</label>
       <div class="editor-wrap">
         <div class="editor-bar">
@@ -528,12 +553,14 @@ footer a { color: var(--green); text-decoration: none; }
 </html>"></textarea>
       </div>
     </div>
+    </div><!-- /campo-html -->
 
     <button class="btn-generate" id="btnGenerate" onclick="startGeneration()">
       ⚡ GERAR APK AGORA
     </button>
   </div>
 
+  <!-- PROGRESS -->
   <div class="card" id="progressCard">
     <div class="card-label">Compilando</div>
 
@@ -565,6 +592,7 @@ footer a { color: var(--green); text-decoration: none; }
     <div class="log-box" id="logBox"></div>
   </div>
 
+  <!-- DOWNLOAD -->
   <div class="card" id="downloadCard">
     <div class="card-label">Concluído</div>
     <div class="download-inner">
@@ -680,11 +708,7 @@ async function getFileSha(token, user, repo, path) {
 
 async function updateFile(token, user, repo, path, content, message) {
   const sha = await getFileSha(token, user, repo, path);
-  
-  const bytes = new TextEncoder().encode(content);
-  const binString = Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
-  const b64 = btoa(binString);
-
+  const b64 = btoa(unescape(encodeURIComponent(content)));
   const body = { message, content: b64 };
   if (sha) body.sha = sha;
   const r = await ghFetch(`/repos/${user}/${repo}/contents/${path}`, 'PUT', body, token);
@@ -741,7 +765,16 @@ async function startGeneration() {
     return;
   }
   if (!appName) { alert('Digite o nome do app!'); return; }
-  if (!html)    { alert('Cole o código HTML!'); return; }
+
+  // Modo URL
+  if (modoAtual === 'url') {
+    const url = document.getElementById('appUrl').value.trim();
+    if (!url) { alert('Digite a URL do app!'); return; }
+    await gerarApkUrl(cfg, appName, url);
+    return;
+  }
+
+  if (!html) { alert('Cole o código HTML!'); return; }
 
   const { token, user, template } = cfg;
   const slug     = slugify(appName);
@@ -771,42 +804,29 @@ async function startGeneration() {
     return;
   }
   setStep('s1', 'done', Math.floor((Date.now()-startTime)/1000) - t.s1);
-  log(`✓ Repo criado com sucesso: ${user}/${nomeRepo}`, 'ok');
+  log(`✓ Repo criado: ${user}/${nomeRepo}`, 'ok');
 
-  // Tempo aumentado para dar folga para o GitHub estabilizar os arquivos iniciais
-  log('Aguardando inicialização completa do repositório (16s)...', 'info');
-  await sleep(16000);
+  // Aguardar init
+  log('Aguardando repositório inicializar (12s)...', 'info');
+  await sleep(12000);
 
-  // ── STEP 2: Injetar HTML e Configurar Recursos ──
+  // ── STEP 2: Injetar HTML direto em assets/index.html (sem XML, sem escape) ──
   setStep('s2', 'active');
-  log('Limpando e reconfigurando strings.xml...', 'info');
+  log('Injetando HTML em assets/index.html...', 'info');
   t.s2 = Math.floor((Date.now() - startTime)/1000);
 
-  // Sobrescrevendo o XML removendo a tag causadora do erro
-  const stringsXml = `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <string name="app_name"><![CDATA[${appName}]]></string>\n</resources>`;
+  // Atualizar strings.xml apenas com o nome do app (sem HTML)
+  const safeAppName = appName.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const stringsXml = `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <string name="app_name">${safeAppName}</string>\n</resources>`;
 
-  const okStrings = await updateFile(
+  await updateFile(
     token, user, nomeRepo,
     'app/src/main/res/values/strings.xml',
     stringsXml,
-    `chore: sanitize strings.xml and set name to ${appName}`
+    `chore: set app name to ${appName}`
   );
 
-  if (!okStrings) {
-    log('Aviso: Falha ao atualizar strings.xml na primeira tentativa, tentando novamente em 3s...', 'orange');
-    await sleep(3000);
-    const retryStrings = await updateFile(token, user, nomeRepo, 'app/src/main/res/values/strings.xml', stringsXml, `chore: retry sanitize strings.xml`);
-    if(!retryStrings) {
-      log('Erro crítico ao limpar strings.xml do template!', 'err');
-      setStep('s2', 'error');
-      stopTimer();
-      document.getElementById('btnGenerate').disabled = false;
-      return;
-    }
-  }
-  log('✓ Arquivo strings.xml limpo com sucesso!', 'ok');
-
-  log('Injetando código em assets/index.html...', 'info');
+  // Salvar o HTML puro no assets — sem nenhum escape, funciona com qualquer HTML
   const okInject = await updateFile(
     token, user, nomeRepo,
     'app/src/main/assets/index.html',
@@ -815,14 +835,14 @@ async function startGeneration() {
   );
 
   if (!okInject) {
-    log('Erro ao injetar código HTML no diretório assets!', 'err');
+    log('Erro ao injetar HTML!', 'err');
     setStep('s2', 'error');
     stopTimer();
     document.getElementById('btnGenerate').disabled = false;
     return;
   }
   setStep('s2', 'done', Math.floor((Date.now()-startTime)/1000) - t.s2);
-  log('✓ Todos os recursos locais reconfigurados', 'ok');
+  log('✓ HTML injetado com sucesso', 'ok');
 
   // ── STEP 3: Aguardar build ──
   setStep('s3', 'active');
@@ -833,24 +853,24 @@ async function startGeneration() {
 
   if (!build.success) {
     log(`Build falhou: ${build.conclusion}`, 'err');
-    log(`Ver log completo em: https://github.com/${user}/${nomeRepo}/actions`, 'info');
+    log(`Ver log: https://github.com/${user}/${nomeRepo}/actions`, 'info');
     setStep('s3', 'error');
     stopTimer();
     document.getElementById('btnGenerate').disabled = false;
     return;
   }
   setStep('s3', 'done', Math.floor((Date.now()-startTime)/1000) - t.s3);
-  log('✓ Build concluído com sucesso total!', 'ok');
+  log('✓ Build concluído com sucesso!', 'ok');
 
   // ── STEP 4: Download ──
   setStep('s4', 'active');
-  log('Coletando link para o download do APK...', 'info');
+  log('Obtendo link de download...', 'info');
 
   const dlUrl = await getArtifactUrl(token, user, nomeRepo, build.id);
   setStep('s4', 'done', Math.floor((Date.now()-startTime)/1000));
   stopTimer();
 
-  // Mostrar painel de download
+  // Mostrar download
   document.getElementById('progressCard').classList.remove('show');
   document.getElementById('downloadCard').classList.add('show');
   document.getElementById('dlAppName').textContent = `${appName} — pronto!`;
@@ -865,7 +885,96 @@ async function startGeneration() {
     dlBtn.textContent = '🔗 VER NO GITHUB';
   }
 
-  log(`✓ PROCESSO CONCLUÍDO EM ${Math.floor((Date.now()-startTime)/1000)}s`, 'ok');
+  log(`✓ CONCLUÍDO em ${Math.floor((Date.now()-startTime)/1000)}s`, 'ok');
+  document.getElementById('btnGenerate').disabled = false;
+}
+
+async function gerarApkUrl(cfg, appName, appUrl) {
+  const { token, user } = cfg;
+  const urlTemplate = 'html-to-url-template';
+  const slug    = slugify(appName);
+  const ts      = Date.now().toString().slice(-6);
+  const nomeRepo = 'app-' + slug + '-' + ts;
+
+  document.getElementById('btnGenerate').disabled = true;
+  document.getElementById('progressCard').classList.add('show');
+  document.getElementById('downloadCard').classList.remove('show');
+  document.getElementById('logBox').innerHTML = '';
+  startTimer();
+
+  const t = {};
+
+  // Step 1
+  setStep('s1', 'active');
+  log('Criando repo: ' + nomeRepo + '...', 'info');
+  t.s1 = Math.floor((Date.now() - startTime)/1000);
+
+  const rCreate = await criarRepo(token, user, urlTemplate, nomeRepo);
+  if (rCreate.status !== 201) {
+    log('Erro ao criar repo: ' + rCreate.status, 'err');
+    setStep('s1', 'error'); stopTimer();
+    document.getElementById('btnGenerate').disabled = false;
+    return;
+  }
+  setStep('s1', 'done', Math.floor((Date.now()-startTime)/1000) - t.s1);
+  log('Repo criado: ' + user + '/' + nomeRepo, 'ok');
+
+  log('Aguardando repositório inicializar (12s)...', 'info');
+  await sleep(12000);
+
+  // Step 2 — injetar nome e URL no strings.xml
+  setStep('s2', 'active');
+  log('Configurando URL: ' + appUrl + '...', 'info');
+  t.s2 = Math.floor((Date.now() - startTime)/1000);
+
+  const safeNameUrl = appName.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const stringsXml = '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <string name="app_name">' + safeNameUrl + '</string>\n    <string name="app_url">' + appUrl + '</string>\n</resources>';
+
+  const okInject = await updateFile(token, user, nomeRepo,
+    'app/src/main/res/values/strings.xml', stringsXml,
+    'chore: set URL for ' + appName);
+
+  if (!okInject) {
+    log('Erro ao configurar URL!', 'err');
+    setStep('s2', 'error'); stopTimer();
+    document.getElementById('btnGenerate').disabled = false;
+    return;
+  }
+  setStep('s2', 'done', Math.floor((Date.now()-startTime)/1000) - t.s2);
+  log('URL configurada com sucesso', 'ok');
+
+  // Step 3
+  setStep('s3', 'active');
+  log('Aguardando GitHub Actions compilar (~5 min)...', 'info');
+  t.s3 = Math.floor((Date.now() - startTime)/1000);
+
+  const build = await aguardarBuild(token, user, nomeRepo, (msg) => log(msg));
+  if (!build.success) {
+    log('Build falhou: ' + build.conclusion, 'err');
+    log('Ver log: https://github.com/' + user + '/' + nomeRepo + '/actions', 'info');
+    setStep('s3', 'error'); stopTimer();
+    document.getElementById('btnGenerate').disabled = false;
+    return;
+  }
+  setStep('s3', 'done', Math.floor((Date.now()-startTime)/1000) - t.s3);
+  log('Build concluído!', 'ok');
+
+  // Step 4
+  setStep('s4', 'active');
+  const dlUrl = await getArtifactUrl(token, user, nomeRepo, build.id);
+  setStep('s4', 'done', Math.floor((Date.now()-startTime)/1000));
+  stopTimer();
+
+  document.getElementById('progressCard').classList.remove('show');
+  document.getElementById('downloadCard').classList.add('show');
+  document.getElementById('dlAppName').textContent = appName + ' — pronto!';
+  document.getElementById('dlInfo').textContent = 'App online: ' + appUrl;
+
+  const dlBtn = document.getElementById('dlBtn');
+  dlBtn.href = dlUrl || ('https://github.com/' + user + '/' + nomeRepo + '/actions');
+  dlBtn.textContent = dlUrl ? '⬇ BAIXAR APK' : '🔗 VER NO GITHUB';
+
+  log('CONCLUIDO em ' + Math.floor((Date.now()-startTime)/1000) + 's', 'ok');
   document.getElementById('btnGenerate').disabled = false;
 }
 
@@ -879,7 +988,38 @@ function resetForm() {
   ['s1','s2','s3','s4'].forEach(s => setStep(s, 'wait'));
 }
 
-// Inicialização básica
+// Modo HTML ou URL
+let modoAtual = 'html';
+
+function setModo(modo) {
+  modoAtual = modo;
+  const btnHtml = document.getElementById('btn-modo-html');
+  const btnUrl  = document.getElementById('btn-modo-url');
+  const campoHtml = document.getElementById('campo-html');
+  const campoUrl  = document.getElementById('campo-url');
+
+  if (modo === 'html') {
+    btnHtml.style.borderColor = '#00e676';
+    btnHtml.style.background  = '#00e67622';
+    btnHtml.style.color       = '#00e676';
+    btnUrl.style.borderColor  = '#1e2830';
+    btnUrl.style.background   = 'transparent';
+    btnUrl.style.color        = '#546e7a';
+    campoHtml.style.display   = 'block';
+    campoUrl.style.display    = 'none';
+  } else {
+    btnUrl.style.borderColor  = '#40c4ff';
+    btnUrl.style.background   = '#40c4ff22';
+    btnUrl.style.color        = '#40c4ff';
+    btnHtml.style.borderColor = '#1e2830';
+    btnHtml.style.background  = 'transparent';
+    btnHtml.style.color       = '#546e7a';
+    campoUrl.style.display    = 'block';
+    campoHtml.style.display   = 'none';
+  }
+}
+
+// Init
 window.addEventListener('load', () => {
   const cfg = loadConfig();
   if (!cfg.token) {
